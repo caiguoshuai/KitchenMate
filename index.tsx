@@ -27,7 +27,12 @@ import {
   Leaf,
   Image as ImageIcon,
   Wand2,
-  ArrowDown
+  ArrowDown,
+  Search,
+  User,
+  LogOut,
+  Lock,
+  UserCircle
 } from 'lucide-react';
 
 // --- TYPES (V2 Mental Model) ---
@@ -80,6 +85,13 @@ interface ShoppingListItem {
   unit: string;
   checked: boolean;
   notes?: string;
+}
+
+interface UserProfile {
+  username: string;
+  name: string;
+  avatar: string;
+  joinedDate: string;
 }
 
 // --- MOCK DATA ---
@@ -144,7 +156,9 @@ const TRANSLATIONS = {
       shop: 'Shopping List',
       architecture: 'Architecture',
       addRecipe: 'Add Recipe',
-      editRecipe: 'Edit Recipe'
+      editRecipe: 'Edit Recipe',
+      login: 'Login',
+      profile: 'My Profile'
     },
     actions: {
       add: 'Add',
@@ -160,7 +174,10 @@ const TRANSLATIONS = {
       delete: 'Delete',
       smartPaste: 'Smart Paste',
       parse: 'Parse',
-      addRow: 'Add Row'
+      addRow: 'Add Row',
+      login: 'Sign In',
+      logout: 'Sign Out',
+      changePassword: 'Change Password'
     },
     labels: {
       servings: 'Servings',
@@ -176,7 +193,11 @@ const TRANSLATIONS = {
       steps: 'Steps',
       recipeTitle: 'Recipe Title',
       imageUrl: 'Image URL',
-      stepHint: 'Enter step instruction...'
+      stepHint: 'Enter step instruction...',
+      username: 'Username',
+      password: 'Password',
+      welcome: 'Welcome back',
+      memberSince: 'Member since'
     },
     specs: {
       title: 'Step 1: V2 Database Schema (Multi-Recipe Support)',
@@ -193,7 +214,9 @@ const TRANSLATIONS = {
       shop: '智能购物清单',
       architecture: '架构设计',
       addRecipe: '添加食谱',
-      editRecipe: '编辑食谱'
+      editRecipe: '编辑食谱',
+      login: '用户登录',
+      profile: '个人中心'
     },
     actions: {
       add: '添加',
@@ -209,7 +232,10 @@ const TRANSLATIONS = {
       delete: '删除',
       smartPaste: '智能粘贴',
       parse: '解析',
-      addRow: '添加一行'
+      addRow: '添加一行',
+      login: '登录',
+      logout: '退出登录',
+      changePassword: '修改密码'
     },
     labels: {
       servings: '份量',
@@ -225,7 +251,11 @@ const TRANSLATIONS = {
       steps: '步骤',
       recipeTitle: '食谱名称',
       imageUrl: '图片链接',
-      stepHint: '输入步骤说明...'
+      stepHint: '输入步骤说明...',
+      username: '用户名',
+      password: '密码',
+      welcome: '欢迎回来',
+      memberSince: '注册时间'
     },
     specs: {
       title: '步骤 1: V2 数据库模型 (多食谱支持)',
@@ -267,6 +297,128 @@ const smartParseIngredients = (text: string): Ingredient[] => {
 };
 
 // --- COMPONENTS ---
+
+// Login View
+const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const t = TRANSLATIONS[lang];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === 'root' && password === 'root') {
+      onLogin();
+    } else {
+      setError(lang === 'zh' ? '用户名或密码错误' : 'Invalid username or password');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-8 border border-gray-100">
+        <div className="flex justify-center mb-6">
+          <div className="bg-orange-100 p-4 rounded-full">
+            <ChefHat className="w-10 h-10 text-orange-600" />
+          </div>
+        </div>
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">KitchenMate</h2>
+        <p className="text-center text-gray-500 mb-8">{t.labels.welcome}</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.username}</label>
+            <div className="relative">
+              <User className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+              <input 
+                type="text"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                placeholder="root"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.password}</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+              <input 
+                type="password"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                placeholder="root"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              {error}
+            </div>
+          )}
+
+          <button 
+            type="submit"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition-transform active:scale-95"
+          >
+            {t.actions.login}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Profile View
+const ProfileView = ({ user, onLogout, lang }: { user: UserProfile, onLogout: () => void, lang: 'en' | 'zh' }) => {
+  const t = TRANSLATIONS[lang];
+  
+  return (
+    <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+      {/* Profile Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center">
+        <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center mb-4 border-4 border-white shadow-lg">
+          <UserCircle className="w-16 h-16 text-indigo-500" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-800">{user.name}</h2>
+        <p className="text-gray-500 text-sm font-mono">@{user.username}</p>
+        <div className="mt-4 flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">
+           <Calendar className="w-3 h-3" /> {t.labels.memberSince}: {user.joinedDate}
+        </div>
+      </div>
+
+      {/* Settings */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center justify-between group">
+           <div className="flex items-center gap-3">
+             <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Lock className="w-5 h-5" /></div>
+             <span className="font-medium text-gray-700">{t.actions.changePassword}</span>
+           </div>
+           <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+        </div>
+        
+        <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex items-center justify-between group">
+           <div className="flex items-center gap-3">
+             <div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Globe className="w-5 h-5" /></div>
+             <span className="font-medium text-gray-700">Language / 语言</span>
+           </div>
+           <span className="text-sm text-gray-400">{lang === 'en' ? 'English' : '中文'}</span>
+        </div>
+      </div>
+
+      <button 
+        onClick={onLogout}
+        className="w-full bg-white border border-red-200 text-red-600 font-bold py-3.5 rounded-xl shadow-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+      >
+        <LogOut className="w-5 h-5" />
+        {t.actions.logout}
+      </button>
+    </div>
+  );
+};
 
 // 1. Architecture View
 const ArchitectureView = ({ lang }: { lang: 'en' | 'zh' }) => {
@@ -603,6 +755,17 @@ const RecipeView = ({
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter recipes based on title, tags, or ingredients
+  const filteredRecipes = recipes.filter(r => {
+    const q = searchQuery.toLowerCase();
+    return (
+      r.title.toLowerCase().includes(q) ||
+      r.tags.some(tag => tag.toLowerCase().includes(q)) ||
+      r.ingredients.some(ing => ing.name.toLowerCase().includes(q))
+    );
+  });
 
   // If adding or editing, show Form
   if (isCreating || editingId) {
@@ -621,54 +784,71 @@ const RecipeView = ({
 
   // Otherwise show List
   return (
-    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-      {recipes.map(recipe => (
-        <div key={recipe.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col group hover:shadow-md transition-shadow">
-          <div className="h-48 overflow-hidden relative">
-             <img src={recipe.image} alt={recipe.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-             <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => setEditingId(recipe.id)}
-                  className="p-2 bg-white/90 rounded-full text-gray-700 hover:text-indigo-600 shadow-sm backdrop-blur-sm"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => onDelete(recipe.id)}
-                  className="p-2 bg-white/90 rounded-full text-gray-700 hover:text-red-600 shadow-sm backdrop-blur-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-             </div>
-             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-               <h3 className="text-white font-bold text-lg">{recipe.title}</h3>
-               <div className="flex gap-2 mt-1">
-                 {recipe.tags.map(tag => (
-                   <span key={tag} className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full backdrop-blur-sm">{tag}</span>
-                 ))}
-               </div>
-             </div>
-          </div>
-          <div className="p-4 flex-1">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-500">{TRANSLATIONS[lang].labels.servings}: {recipe.baseServings}</span>
-            </div>
-            <ul className="text-sm text-gray-600 space-y-1">
-              {recipe.ingredients.slice(0, 3).map((ing, i) => (
-                <li key={i}>• {ing.amount}{ing.unit} {ing.name}</li>
-              ))}
-              {recipe.ingredients.length > 3 && <li>...</li>}
-            </ul>
-          </div>
+    <div className="p-4">
+      {/* Search Bar */}
+      <div className="mb-6 relative group">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Search className="h-5 w-5 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
         </div>
-      ))}
-      <button 
-        onClick={() => setIsCreating(true)}
-        className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-gray-300 rounded-xl text-gray-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors bg-gray-50 hover:bg-indigo-50"
-      >
-        <Plus className="w-8 h-8 mb-2" />
-        <span className="font-medium">{TRANSLATIONS[lang].actions.add}</span>
-      </button>
+        <input
+          type="text"
+          className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
+          placeholder={lang === 'zh' ? "搜索食谱、食材..." : "Search recipes, ingredients..."}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      {/* Recipe Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filteredRecipes.map(recipe => (
+          <div key={recipe.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col group hover:shadow-md transition-shadow">
+            <div className="h-48 overflow-hidden relative">
+               <img src={recipe.image} alt={recipe.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+               <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={() => setEditingId(recipe.id)}
+                    className="p-2 bg-white/90 rounded-full text-gray-700 hover:text-indigo-600 shadow-sm backdrop-blur-sm"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => onDelete(recipe.id)}
+                    className="p-2 bg-white/90 rounded-full text-gray-700 hover:text-red-600 shadow-sm backdrop-blur-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+               </div>
+               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                 <h3 className="text-white font-bold text-lg">{recipe.title}</h3>
+                 <div className="flex gap-2 mt-1">
+                   {recipe.tags.map(tag => (
+                     <span key={tag} className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full backdrop-blur-sm">{tag}</span>
+                   ))}
+                 </div>
+               </div>
+            </div>
+            <div className="p-4 flex-1">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-500">{TRANSLATIONS[lang].labels.servings}: {recipe.baseServings}</span>
+              </div>
+              <ul className="text-sm text-gray-600 space-y-1">
+                {recipe.ingredients.slice(0, 3).map((ing, i) => (
+                  <li key={i}>• {ing.amount}{ing.unit} {ing.name}</li>
+                ))}
+                {recipe.ingredients.length > 3 && <li>...</li>}
+              </ul>
+            </div>
+          </div>
+        ))}
+        <button 
+          onClick={() => setIsCreating(true)}
+          className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-gray-300 rounded-xl text-gray-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors bg-gray-50 hover:bg-indigo-50"
+        >
+          <Plus className="w-8 h-8 mb-2" />
+          <span className="font-medium">{TRANSLATIONS[lang].actions.add}</span>
+        </button>
+      </div>
     </div>
   );
 };
@@ -1042,6 +1222,11 @@ const ShoppingListView = ({
     setList(list.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
   };
 
+  // Allow user to edit the amount they actually bought
+  const updateAmount = (id: string, val: number) => {
+    setList(list.map(item => item.id === id ? { ...item, needed: val } : item));
+  };
+
   const handleFinish = () => {
     onPurchase(list.filter(i => i.checked));
     setList(list.filter(i => !i.checked));
@@ -1082,7 +1267,21 @@ const ShoppingListView = ({
             </div>
             <div className="flex-1">
               <div className={`font-medium ${item.checked ? 'text-green-800 line-through' : 'text-gray-800'}`}>{item.name}</div>
-              <div className="text-xs text-gray-500">{item.needed > 0 ? `${item.needed} ${item.unit}` : 'Check Stock'}</div>
+              
+              {/* Editable Amount Input */}
+              <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                 <input 
+                   type="number"
+                   min="0"
+                   step="any"
+                   className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:border-indigo-500 outline-none bg-white/80"
+                   value={item.needed}
+                   onChange={(e) => updateAmount(item.id, parseFloat(e.target.value) || 0)}
+                 />
+                 <span className="text-xs text-gray-500">{item.unit}</span>
+              </div>
+              
+              {item.notes && <div className="text-xs text-orange-500 mt-1">{item.notes}</div>}
             </div>
           </div>
         ))}
@@ -1101,9 +1300,18 @@ const ShoppingListView = ({
 // --- APP ---
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState<'plan' | 'recipes' | 'inventory' | 'shop' | 'specs'>('plan');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeTab, setActiveTab] = useState<'plan' | 'recipes' | 'inventory' | 'shop' | 'specs' | 'profile'>('plan');
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   
+  // User State
+  const [user, setUser] = useState<UserProfile>({
+    username: 'root',
+    name: 'Root User',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    joinedDate: '2025-01-01'
+  });
+
   // V2 STATE
   const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
   const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
@@ -1127,6 +1335,15 @@ const App = () => {
   });
 
   // --- ACTIONS ---
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setActiveTab('plan'); // Reset tab
+  };
 
   const handleSaveRecipe = (recipe: Recipe) => {
     setRecipes(prev => {
@@ -1169,7 +1386,39 @@ const App = () => {
     }));
   };
 
-  // COOK LOGIC
+  // NEW: Handle Shopping List -> Inventory
+  const handlePurchase = (items: ShoppingListItem[]) => {
+    setInventory(prev => {
+      const updated = [...prev];
+      items.forEach(shopItem => {
+         // Find existing item by name AND unit to update amount
+         const idx = updated.findIndex(i => i.name === shopItem.name && i.unit === shopItem.unit);
+         if (idx >= 0) {
+            // Update existing
+            updated[idx] = {
+              ...updated[idx],
+              amount: updated[idx].amount + shopItem.needed, // Add bought amount
+              status: 'normal', // Reset status
+              expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0] // +7 days default
+            };
+         } else {
+            // Create new
+            updated.push({
+               id: Math.random().toString(),
+               name: shopItem.name,
+               amount: shopItem.needed,
+               unit: shopItem.unit,
+               status: 'normal',
+               expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+            });
+         }
+      });
+      return updated;
+    });
+    alert(lang === 'zh' ? `已将 ${items.length} 项物品加入库存！` : `Added ${items.length} items to inventory!`);
+  };
+
+  // COOK LOGIC (Updated to remove 0 amount items)
   const openCookModal = (slot: MealSlot) => {
     // 1. Calculate Consumption
     const totalNeeds: Record<string, number> = {};
@@ -1185,19 +1434,25 @@ const App = () => {
   };
 
   const confirmCook = () => {
-    // 2. Deduct Inventory (Backend Simulation)
+    // 2. Deduct Inventory
     setInventory(prev => prev.map(inv => {
       const consumedAmount = cookModal.consumption[inv.name];
       if (consumedAmount) {
         return { ...inv, amount: Math.max(0, inv.amount - consumedAmount) };
       }
       return inv;
-    }));
+    }).filter(inv => inv.amount > 0)); // AUTOMATICALLY REMOVE ZERO AMOUNT ITEMS
+    
     setCookModal({ isOpen: false, slot: null, consumption: {} });
-    alert("Cooked! Inventory updated.");
+    alert(lang === 'zh' ? "烹饪完成！库存已更新。" : "Cooked! Inventory updated.");
   };
 
   const t = TRANSLATIONS[lang];
+
+  // --- AUTH CHECK ---
+  if (!isAuthenticated) {
+    return <LoginView onLogin={handleLogin} lang={lang} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
@@ -1207,9 +1462,17 @@ const App = () => {
           <div className="bg-orange-500 p-1.5 rounded-lg"><ChefHat className="w-5 h-5 text-white" /></div>
           <h1 className="font-bold text-lg tracking-tight">KitchenMate V2</h1>
         </div>
-        <button onClick={() => setLang(l => l === 'en' ? 'zh' : 'en')} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
-          <span className="text-xs font-bold text-gray-600">{lang.toUpperCase()}</span>
-        </button>
+        <div className="flex gap-3">
+           <button onClick={() => setLang(l => l === 'en' ? 'zh' : 'en')} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
+             <span className="text-xs font-bold text-gray-600">{lang.toUpperCase()}</span>
+           </button>
+           <button 
+             onClick={() => setActiveTab('profile')} 
+             className={`p-2 rounded-full hover:bg-gray-100 transition-colors ${activeTab === 'profile' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600'}`}
+           >
+             <User className="w-5 h-5" />
+           </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -1228,11 +1491,13 @@ const App = () => {
         {activeTab === 'inventory' && <InventoryView 
           inventory={inventory} lang={lang} 
           onAdd={(i) => setInventory([...inventory, i])}
-          onEdit={(id, data) => setInventory(inventory.map(i => i.id === id ? {...i, ...data} : i))}
+          // Updated: Filter 0 amount on manual edit
+          onEdit={(id, data) => setInventory(inventory.map(i => i.id === id ? {...i, ...data} : i).filter(i => i.amount > 0))}
           onDelete={(id) => setInventory(inventory.filter(i => i.id !== id))}
         />}
-        {activeTab === 'shop' && <ShoppingListView plans={slots} recipes={recipes} inventory={inventory} onPurchase={(items) => alert(`Purchased ${items.length} items`)} lang={lang} />}
+        {activeTab === 'shop' && <ShoppingListView plans={slots} recipes={recipes} inventory={inventory} onPurchase={handlePurchase} lang={lang} />}
         {activeTab === 'specs' && <ArchitectureView lang={lang} />}
+        {activeTab === 'profile' && <ProfileView user={user} onLogout={handleLogout} lang={lang} />}
       </main>
 
       {/* Cook Consumption Modal */}
