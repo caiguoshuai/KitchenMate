@@ -40,113 +40,21 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-// --- TYPES (V2 Mental Model) ---
+// Import Types
+import { 
+  Recipe, 
+  Ingredient, 
+  MealSlot, 
+  MealItem, 
+  InventoryItem, 
+  ShoppingListItem, 
+  UserProfile 
+} from './types';
 
-interface Ingredient {
-  name: string;
-  amount: number;
-  unit: string;
-  isSeasoning: boolean;
-}
-
-interface Recipe {
-  id: string;
-  title: string;
-  image: string;
-  baseServings: number;
-  ingredients: Ingredient[];
-  steps: string[];
-  tags: string[];
-}
-
-interface MealItem {
-  id: string;
-  recipeId: string;
-  multiplier: number;
-}
-
-interface MealSlot {
-  id: string;
-  date: string;
-  type: 'breakfast' | 'lunch' | 'dinner';
-  items: MealItem[]; 
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  amount: number;
-  unit: string;
-  expirationDate: string;
-  status: 'normal' | 'expiring' | 'expired';
-}
-
-interface ShoppingListItem {
-  id: string;
-  name: string;
-  needed: number;
-  unit: string;
-  checked: boolean;
-  notes?: string;
-}
-
-interface UserProfile {
-  username: string;
-  name: string;
-  avatar: string;
-  joinedDate: string;
-}
-
-// --- MOCK DATA ---
-
-const INITIAL_RECIPES: Recipe[] = [
-  {
-    id: '1',
-    title: 'Kung Pao Chicken',
-    image: 'https://images.unsplash.com/photo-1525755617299-7a88784337d5?auto=format&fit=crop&w=800&q=80',
-    baseServings: 2,
-    ingredients: [
-      { name: 'Chicken Breast', amount: 300, unit: 'g', isSeasoning: false },
-      { name: 'Peanuts', amount: 50, unit: 'g', isSeasoning: false },
-      { name: 'Dried Chili', amount: 10, unit: 'g', isSeasoning: true },
-      { name: 'Scallion', amount: 2, unit: 'stalks', isSeasoning: false }
-    ],
-    steps: ['Dice chicken', 'Fry peanuts', 'Stir fry everything'],
-    tags: ['Chinese', 'Spicy']
-  },
-  {
-    id: '2',
-    title: 'Tomato Pasta',
-    image: 'https://images.unsplash.com/photo-1626844131082-256783844137?auto=format&fit=crop&w=800&q=80',
-    baseServings: 1,
-    ingredients: [
-      { name: 'Pasta', amount: 150, unit: 'g', isSeasoning: false },
-      { name: 'Tomato Sauce', amount: 200, unit: 'g', isSeasoning: false },
-      { name: 'Basil', amount: 5, unit: 'leaves', isSeasoning: true }
-    ],
-    steps: ['Boil water', 'Cook pasta', 'Mix sauce'],
-    tags: ['Western', 'Quick']
-  },
-  {
-    id: '3',
-    title: 'Steamed Rice',
-    image: 'https://images.unsplash.com/photo-1516684732162-798a0062be99?auto=format&fit=crop&w=800&q=80',
-    baseServings: 2,
-    ingredients: [
-      { name: 'Rice', amount: 200, unit: 'g', isSeasoning: false },
-      { name: 'Water', amount: 300, unit: 'ml', isSeasoning: true }
-    ],
-    steps: ['Wash rice', 'Cook in rice cooker'],
-    tags: ['Basic', 'Side']
-  }
-];
-
-const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: '1', name: 'Chicken Breast', amount: 500, unit: 'g', expirationDate: '2023-11-20', status: 'expiring' },
-  { id: '2', name: 'Pasta', amount: 500, unit: 'g', expirationDate: '2024-05-01', status: 'normal' },
-  { id: '3', name: 'Eggs', amount: 4, unit: 'pcs', expirationDate: '2023-10-01', status: 'expired' },
-  { id: '4', name: 'Rice', amount: 2000, unit: 'g', expirationDate: '2024-12-01', status: 'normal' }
-];
+// Import Services
+import { recipeService } from './services/recipeService';
+import { inventoryService } from './services/inventoryService';
+import { mealService } from './services/mealService';
 
 // --- I18N ---
 
@@ -463,7 +371,8 @@ const ArchitectureView = ({ lang }: { lang: 'en' | 'zh' }) => {
   const t = TRANSLATIONS[lang];
   const goStructs = `
 package models
-// Backend Logic...
+// Backend Logic is now integrated via mock services.
+// See /services/ folder for TypeScript definitions.
 `;
   return (
     <div className="p-4 space-y-6">
@@ -1008,7 +917,7 @@ const PlannerView = ({
           {t.actions.addDay}
         </button>
         
-        {/* REWRITTEN: CSS Expanded Indicator Strategy - Uses relative container + absolute input with CSS hack */}
+        {/* CSS Expanded Indicator Strategy */}
         <div className="flex-1 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 relative">
            <Calendar className="w-5 h-5 pointer-events-none" />
            <span className="pointer-events-none">{t.actions.selectDate}</span>
@@ -1427,20 +1336,26 @@ const App = () => {
     joinedDate: '2025-01-01'
   });
 
-  const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
-  const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
-  
-  const [slots, setSlots] = useState<MealSlot[]>([
-    { 
-      id: '101', 
-      date: new Date().toISOString().split('T')[0], 
-      type: 'dinner', 
-      items: [
-        { id: 'item1', recipeId: '1', multiplier: 2 },
-        { id: 'item2', recipeId: '3', multiplier: 2 }
-      ] 
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [slots, setSlots] = useState<MealSlot[]>([]);
+
+  // Load Initial Data
+  useEffect(() => {
+    const fetchData = async () => {
+        const [r, i, s] = await Promise.all([
+            recipeService.getRecipes(),
+            inventoryService.getInventory(),
+            mealService.getSlots()
+        ]);
+        setRecipes(r);
+        setInventory(i);
+        setSlots(s);
+    };
+    if (isAuthenticated) {
+        fetchData();
     }
-  ]);
+  }, [isAuthenticated]);
 
   const [cookModal, setCookModal] = useState<{ isOpen: boolean, slot: MealSlot | null, consumption: Record<string, number> }>({
     isOpen: false, slot: null, consumption: {}
@@ -1455,50 +1370,49 @@ const App = () => {
     setActiveTab('plan'); 
   };
 
-  const handleSaveRecipe = (recipe: Recipe) => {
-    setRecipes(prev => {
-      const idx = prev.findIndex(r => r.id === recipe.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = recipe;
-        return updated;
-      }
-      return [...prev, recipe];
-    });
+  const handleSaveRecipe = async (recipe: Recipe) => {
+    await recipeService.saveRecipe(recipe);
+    setRecipes(await recipeService.getRecipes());
   };
 
-  const addItemToSlot = (date: string, type: string, recipeId: string, multiplier: number) => {
-    setSlots(prev => {
-      const existingIdx = prev.findIndex(s => s.date === date && s.type === type);
-      const newItem: MealItem = { id: Math.random().toString(), recipeId, multiplier };
-      
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        updated[existingIdx] = { ...updated[existingIdx], items: [...updated[existingIdx].items, newItem] };
-        return updated;
-      } else {
-        return [...prev, { id: Math.random().toString(), date, type: type as any, items: [newItem] }];
-      }
-    });
+  const handleAddItemToSlot = async (date: string, type: string, recipeId: string, multiplier: number) => {
+    await mealService.addItem(date, type as any, recipeId, multiplier);
+    setSlots(await mealService.getSlots());
   };
 
-  const removeItemFromSlot = (slotId: string, itemId: string) => {
-    setSlots(prev => prev.map(s => {
-      if (s.id !== slotId) return s;
-      return { ...s, items: s.items.filter(i => i.id !== itemId) };
-    }).filter(s => s.items.length > 0)); 
+  const handleRemoveItemFromSlot = async (slotId: string, itemId: string) => {
+    await mealService.removeItem(slotId, itemId);
+    setSlots(await mealService.getSlots());
   };
 
-  const updateItemMultiplier = (slotId: string, itemId: string, m: number) => {
-    setSlots(prev => prev.map(s => {
-      if (s.id !== slotId) return s;
-      return { ...s, items: s.items.map(i => i.id === itemId ? { ...i, multiplier: m } : i) };
-    }));
+  const handleUpdateItemMultiplier = async (slotId: string, itemId: string, m: number) => {
+    await mealService.updateItemMultiplier(slotId, itemId, m);
+    setSlots(await mealService.getSlots());
   };
 
-  const handlePurchase = (items: ShoppingListItem[]) => {
-    setInventory(prev => {
-      const newItems = items.map(shopItem => ({
+  // Inventory Handlers
+  const handleAddInventory = async (item: InventoryItem) => {
+    await inventoryService.addItems([item]);
+    setInventory(await inventoryService.getInventory());
+  };
+
+  const handleEditInventory = async (id: string, data: Partial<InventoryItem>) => {
+    await inventoryService.updateItem(id, data);
+    setInventory(await inventoryService.getInventory());
+  };
+
+  const handleDeleteInventory = async (id: string) => {
+    await inventoryService.deleteItem(id);
+    setInventory(await inventoryService.getInventory());
+  };
+
+  const handleMergeDuplicates = async () => {
+    await inventoryService.mergeDuplicates();
+    setInventory(await inventoryService.getInventory());
+  };
+
+  const handlePurchase = async (items: ShoppingListItem[]) => {
+    const newItems = items.map(shopItem => ({
         id: Math.random().toString(),
         name: shopItem.name,
         amount: shopItem.needed,
@@ -1506,31 +1420,11 @@ const App = () => {
         status: 'normal' as const,
         expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
       }));
-      return [...prev, ...newItems];
-    });
+    await inventoryService.addItems(newItems);
+    setInventory(await inventoryService.getInventory());
     alert(lang === 'zh' ? `已将 ${items.length} 项物品加入库存！` : `Added ${items.length} items to inventory!`);
   };
   
-  const handleMergeDuplicates = () => {
-    setInventory(prev => {
-      const map = new Map<string, InventoryItem>();
-      prev.forEach(item => {
-        const key = item.name.trim().toLowerCase() + '::' + item.unit.trim().toLowerCase();
-        if (map.has(key)) {
-          const existing = map.get(key)!;
-          const newAmount = existing.amount + item.amount;
-          const newExp = existing.expirationDate < item.expirationDate ? existing.expirationDate : item.expirationDate;
-          const newStatus = getFreshness(newExp).status;
-          map.set(key, { ...existing, amount: newAmount, expirationDate: newExp, status: newStatus as any });
-        } else {
-          map.set(key, item);
-        }
-      });
-      return Array.from(map.values());
-    });
-    alert(lang === 'zh' ? "合并完成！" : "Merged!");
-  };
-
   const openCookModal = (slot: MealSlot) => {
     const totalNeeds: Record<string, number> = {};
     slot.items.forEach(item => {
@@ -1544,14 +1438,25 @@ const App = () => {
     setCookModal({ isOpen: true, slot, consumption: totalNeeds });
   };
 
-  const confirmCook = () => {
-    setInventory(prev => prev.map(inv => {
-      const consumedAmount = cookModal.consumption[inv.name];
-      if (consumedAmount) {
-        return { ...inv, amount: Math.max(0, inv.amount - consumedAmount) };
-      }
-      return inv;
-    }).filter(inv => inv.amount > 0)); 
+  const confirmCook = async () => {
+    // Determine updated items based on consumption
+    const updatedInventory: InventoryItem[] = [];
+    
+    // We iterate through current local inventory to calculate changes
+    // In a real app, this logic might happen on backend or via a more complex transaction
+    // Here we simulate the logic:
+    const tempInventory = JSON.parse(JSON.stringify(inventory)) as InventoryItem[];
+    
+    tempInventory.forEach(inv => {
+        const consumedAmount = cookModal.consumption[inv.name];
+        if (consumedAmount) {
+            inv.amount = Math.max(0, inv.amount - consumedAmount);
+            updatedInventory.push(inv);
+        }
+    });
+
+    await inventoryService.batchUpdate(updatedInventory);
+    setInventory(await inventoryService.getInventory());
     
     setCookModal({ isOpen: false, slot: null, consumption: {} });
     alert(lang === 'zh' ? "烹饪完成！库存已更新。" : "Cooked! Inventory updated.");
@@ -1588,19 +1493,22 @@ const App = () => {
             recipes={recipes} 
             inventory={inventory}
             lang={lang} 
-            onDelete={(id) => setRecipes(r => r.filter(x => x.id !== id))} 
+            onDelete={async (id) => { await recipeService.deleteRecipe(id); setRecipes(await recipeService.getRecipes()); }} 
             onSave={handleSaveRecipe}
         />}
         {activeTab === 'plan' && <PlannerView 
             slots={slots} recipes={recipes} 
-            onAddItem={addItemToSlot} onRemoveItem={removeItemFromSlot} onUpdateMultiplier={updateItemMultiplier} onCookSlot={openCookModal}
+            onAddItem={handleAddItemToSlot} 
+            onRemoveItem={handleRemoveItemFromSlot} 
+            onUpdateMultiplier={handleUpdateItemMultiplier} 
+            onCookSlot={openCookModal}
             lang={lang} 
         />}
         {activeTab === 'inventory' && <InventoryView 
           inventory={inventory} lang={lang} 
-          onAdd={(i) => setInventory([...inventory, i])}
-          onEdit={(id, data) => setInventory(inventory.map(i => i.id === id ? {...i, ...data} : i).filter(i => i.amount > 0))}
-          onDelete={(id) => setInventory(inventory.filter(i => i.id !== id))}
+          onAdd={handleAddInventory}
+          onEdit={handleEditInventory}
+          onDelete={handleDeleteInventory}
           onMerge={handleMergeDuplicates}
         />}
         {activeTab === 'shop' && <ShoppingListView plans={slots} recipes={recipes} inventory={inventory} onPurchase={handlePurchase} lang={lang} />}
