@@ -92,7 +92,9 @@ const TRANSLATIONS = {
       logout: 'Sign Out',
       changePassword: 'Change Password',
       setFreshness: 'Set Freshness',
-      merge: 'Merge Duplicates'
+      merge: 'Merge Duplicates',
+      removeDay: 'Remove Day',
+      clearSlot: 'Clear All'
     },
     labels: {
       servings: 'Servings',
@@ -164,7 +166,9 @@ const TRANSLATIONS = {
       logout: '退出登录',
       changePassword: '修改密码',
       setFreshness: '保质期设置',
-      merge: '合并重复项'
+      merge: '合并重复项',
+      removeDay: '移除此日',
+      clearSlot: '清空'
     },
     labels: {
       servings: '份量',
@@ -776,6 +780,7 @@ const PlannerView = ({
   onRemoveItem, 
   onUpdateMultiplier,
   onCookSlot,
+  onClearSlot,
   lang 
 }: { 
   slots: MealSlot[], 
@@ -784,6 +789,7 @@ const PlannerView = ({
   onRemoveItem: (slotId: string, itemId: string) => void,
   onUpdateMultiplier: (slotId: string, itemId: string, m: number) => void,
   onCookSlot: (slot: MealSlot) => void,
+  onClearSlot: (slotId: string) => void,
   lang: 'en' | 'zh'
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
@@ -801,6 +807,10 @@ const PlannerView = ({
     const nextDate = new Date(lastDateStr);
     nextDate.setDate(nextDate.getDate() + 1);
     setPlanDates([...planDates, nextDate.toISOString().split('T')[0]].sort());
+  };
+  
+  const removeDate = (dateToRemove: string) => {
+    setPlanDates(prev => prev.filter(d => d !== dateToRemove));
   };
 
   const handleDateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -831,10 +841,20 @@ const PlannerView = ({
     <div className="p-4 space-y-6">
       {planDates.map(date => (
         <div key={date} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 animate-in fade-in slide-in-from-bottom-2">
-          <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-500" />
-            {date}
-          </h3>
+          <div className="flex justify-between items-center mb-3">
+             <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+               <Calendar className="w-4 h-4 text-indigo-500" />
+               {date}
+             </h3>
+             <button 
+               onClick={() => removeDate(date)} 
+               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+               title={t.actions.removeDay}
+             >
+               <Trash2 className="w-4 h-4" />
+             </button>
+          </div>
+          
           <div className="space-y-4">
             {['breakfast', 'lunch', 'dinner'].map(type => {
               const slot = slots.find(s => s.date === date && s.type === type);
@@ -846,13 +866,22 @@ const PlannerView = ({
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">{type}</span>
                     <div className="flex gap-2">
                       {hasItems && (
-                        <button 
-                          onClick={() => onCookSlot(slot!)}
-                          className="flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium hover:bg-orange-200 transition-colors"
-                        >
-                          <Utensils className="w-3 h-3" />
-                          {t.actions.cook}
-                        </button>
+                        <>
+                           <button 
+                             onClick={() => onCookSlot(slot!)}
+                             className="flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium hover:bg-orange-200 transition-colors"
+                           >
+                             <Utensils className="w-3 h-3" />
+                             {t.actions.cook}
+                           </button>
+                           <button
+                             onClick={() => onClearSlot(slot!.id)}
+                             className="flex items-center gap-1 text-xs bg-red-50 text-red-600 px-2 py-1 rounded-full font-medium hover:bg-red-100 transition-colors border border-red-100"
+                             title={t.actions.clearSlot}
+                           >
+                             <Trash2 className="w-3 h-3" />
+                           </button>
+                        </>
                       )}
                       <button 
                         onClick={() => openAddModal(date, type)}
@@ -1390,6 +1419,11 @@ const App = () => {
     setSlots(await mealService.getSlots());
   };
 
+  const handleClearSlot = async (slotId: string) => {
+    await mealService.clearSlot(slotId);
+    setSlots(await mealService.getSlots());
+  };
+
   // Inventory Handlers
   const handleAddInventory = async (item: InventoryItem) => {
     await inventoryService.addItems([item]);
@@ -1502,6 +1536,7 @@ const App = () => {
             onRemoveItem={handleRemoveItemFromSlot} 
             onUpdateMultiplier={handleUpdateItemMultiplier} 
             onCookSlot={openCookModal}
+            onClearSlot={handleClearSlot}
             lang={lang} 
         />}
         {activeTab === 'inventory' && <InventoryView 

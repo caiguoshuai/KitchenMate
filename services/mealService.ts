@@ -54,5 +54,13 @@ export const mealService = {
       if (s.id !== slotId) return s;
       return { ...s, items: s.items.map(i => i.id === itemId ? { ...i, multiplier } : i) };
     });
+  },
+
+  async clearSlot(slotId: string): Promise<void> {
+    await delay(200);
+    localSlots = localSlots.map(s => {
+      if (s.id === slotId) return { ...s, items: [] };
+      return s;
+    }).filter(s => s.items.length > 0); // Optionally remove empty slots or keep them empty
   }
 };
