@@ -22,6 +22,20 @@
         background-color: #f3f4f6;
         overscroll-behavior-y: none;
       }
+
+      /* --- CRITICAL DATE PICKER FIX --- */
+      /* This forces the internal calendar icon (the trigger) to expand to the full size of the input */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        opacity: 0; /* Make it invisible but clickable */
+        cursor: pointer;
+      }
     </style>
   <script type="importmap">
 {

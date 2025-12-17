@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   ChefHat, 
@@ -32,7 +32,12 @@ import {
   User,
   LogOut,
   Lock,
-  UserCircle
+  UserCircle,
+  Clock,
+  Snowflake,
+  Sun,
+  Layers,
+  CheckCircle2
 } from 'lucide-react';
 
 // --- TYPES (V2 Mental Model) ---
@@ -54,17 +59,15 @@ interface Recipe {
   tags: string[];
 }
 
-// V2: MealItem is a single recipe within a meal slot
 interface MealItem {
   id: string;
   recipeId: string;
   multiplier: number;
 }
 
-// V2: MealSlot represents "2025-12-16 Lunch" containing multiple items
 interface MealSlot {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   type: 'breakfast' | 'lunch' | 'dinner';
   items: MealItem[]; 
 }
@@ -162,6 +165,8 @@ const TRANSLATIONS = {
     },
     actions: {
       add: 'Add',
+      addDay: 'Add Next Day',
+      selectDate: 'Select Date',
       calculate: 'Generate List',
       finishShopping: 'Finish Shopping',
       check: 'Check Stock',
@@ -177,15 +182,17 @@ const TRANSLATIONS = {
       addRow: 'Add Row',
       login: 'Sign In',
       logout: 'Sign Out',
-      changePassword: 'Change Password'
+      changePassword: 'Change Password',
+      setFreshness: 'Set Freshness',
+      merge: 'Merge Duplicates'
     },
     labels: {
       servings: 'Servings',
       multiplier: 'Multiplier',
       ingredients: 'Ingredients',
-      expiring: 'Expiring Soon',
+      expiring: 'Expiring',
       expired: 'Expired',
-      normal: 'Good',
+      normal: 'Fresh',
       selectRecipe: 'Select Recipe',
       consumption: 'Ingredients to Consume',
       consumptionHint: 'Adjust actual used amounts before deducting.',
@@ -197,7 +204,17 @@ const TRANSLATIONS = {
       username: 'Username',
       password: 'Password',
       welcome: 'Welcome back',
-      memberSince: 'Member since'
+      memberSince: 'Member since',
+      expirationDate: 'Expiration Date',
+      daysLeft: 'days left',
+      mergeHint: 'Combines items with same name & unit. Keeps earliest date.',
+      readyToCook: 'Ready to Cook'
+    },
+    freshness: {
+      quick: 'Quick Set',
+      fridge: '+3 Days (Fridge)',
+      week: '+1 Week',
+      frozen: '+1 Month (Frozen)'
     },
     specs: {
       title: 'Step 1: V2 Database Schema (Multi-Recipe Support)',
@@ -220,6 +237,8 @@ const TRANSLATIONS = {
     },
     actions: {
       add: '添加',
+      addDay: '增加一天计划',
+      selectDate: '选择特定日期',
       calculate: '生成清单',
       finishShopping: '完成购物',
       check: '检查库存',
@@ -235,7 +254,9 @@ const TRANSLATIONS = {
       addRow: '添加一行',
       login: '登录',
       logout: '退出登录',
-      changePassword: '修改密码'
+      changePassword: '修改密码',
+      setFreshness: '保质期设置',
+      merge: '合并重复项'
     },
     labels: {
       servings: '份量',
@@ -243,7 +264,7 @@ const TRANSLATIONS = {
       ingredients: '食材',
       expiring: '即将过期',
       expired: '已过期',
-      normal: '正常',
+      normal: '新鲜',
       selectRecipe: '选择食谱',
       consumption: '消耗食材',
       consumptionHint: '扣减前可调整实际使用量。',
@@ -255,7 +276,17 @@ const TRANSLATIONS = {
       username: '用户名',
       password: '密码',
       welcome: '欢迎回来',
-      memberSince: '注册时间'
+      memberSince: '注册时间',
+      expirationDate: '保质期至',
+      daysLeft: '天剩余',
+      mergeHint: '合并同名同单位的食材，保留最早过期时间。',
+      readyToCook: '食材齐备'
+    },
+    freshness: {
+      quick: '快速设置',
+      fridge: '+3天 (冷藏)',
+      week: '+1周 (常规)',
+      frozen: '+1月 (冷冻)'
     },
     specs: {
       title: '步骤 1: V2 数据库模型 (多食谱支持)',
@@ -268,18 +299,22 @@ const TRANSLATIONS = {
 
 // --- HELPER FUNCTIONS ---
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'expired': return 'bg-red-100 text-red-800 border-red-200';
-    case 'expiring': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    default: return 'bg-green-100 text-green-800 border-green-200';
-  }
+const getFreshness = (dateStr: string) => {
+  if (!dateStr) return { status: 'unknown', color: 'bg-gray-100 text-gray-500 border-gray-200', days: 0 };
+  
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const exp = new Date(dateStr);
+  const diffTime = exp.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { status: 'expired', color: 'bg-red-100 text-red-800 border-red-200', days: diffDays };
+  if (diffDays <= 3) return { status: 'expiring', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', days: diffDays };
+  return { status: 'normal', color: 'bg-green-100 text-green-800 border-green-200', days: diffDays };
 };
 
 const smartParseIngredients = (text: string): Ingredient[] => {
   return text.split('\n').filter(line => line.trim()).map(line => {
-    // Regex: Start with number (int/float), optional space, optional unit (word), space, rest is name
-    // Matches: "200g Chicken", "200 g Chicken", "2 Chicken", "1.5 kg Beef"
     const regex = /^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.*)$/;
     const match = line.trim().match(regex);
     
@@ -287,18 +322,25 @@ const smartParseIngredients = (text: string): Ingredient[] => {
       return {
         name: match[3].trim(),
         amount: parseFloat(match[1]),
-        unit: match[2] || 'pcs', // Default unit if strictly number + name
+        unit: match[2] || 'pcs', 
         isSeasoning: false
       };
     }
-    // Fallback for lines that don't match strict pattern
     return { name: line.trim(), amount: 1, unit: 'pcs', isSeasoning: false };
   });
 };
 
+const getAggregatedInventory = (inventory: InventoryItem[]) => {
+  const stockMap = new Map<string, number>();
+  inventory.forEach(item => {
+    const key = item.name.trim().toLowerCase();
+    stockMap.set(key, (stockMap.get(key) || 0) + item.amount);
+  });
+  return stockMap;
+};
+
 // --- COMPONENTS ---
 
-// Login View
 const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -372,13 +414,11 @@ const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }
   );
 };
 
-// Profile View
 const ProfileView = ({ user, onLogout, lang }: { user: UserProfile, onLogout: () => void, lang: 'en' | 'zh' }) => {
   const t = TRANSLATIONS[lang];
   
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4">
-      {/* Profile Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center">
         <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center mb-4 border-4 border-white shadow-lg">
           <UserCircle className="w-16 h-16 text-indigo-500" />
@@ -390,7 +430,6 @@ const ProfileView = ({ user, onLogout, lang }: { user: UserProfile, onLogout: ()
         </div>
       </div>
 
-      {/* Settings */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center justify-between group">
            <div className="flex items-center gap-3">
@@ -420,54 +459,12 @@ const ProfileView = ({ user, onLogout, lang }: { user: UserProfile, onLogout: ()
   );
 };
 
-// 1. Architecture View
 const ArchitectureView = ({ lang }: { lang: 'en' | 'zh' }) => {
   const t = TRANSLATIONS[lang];
-  
   const goStructs = `
 package models
-
-// --- Backend Logic: UpdateRecipe (Full Replacement Strategy) ---
-
-// PUT /api/recipes/:id
-func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
-    var payload RecipeInput
-    if err := c.BindJSON(&payload); err != nil {
-        c.AbortWithStatus(400)
-        return
-    }
-
-    // 1. Start Transaction
-    tx := h.db.Begin()
-
-    // 2. Update Basic Fields (Title, Servings, etc.)
-    if err := tx.Model(&Recipe{}).Where("id = ?", id).Updates(payload).Error; err != nil {
-        tx.Rollback()
-        return
-    }
-
-    // 3. Ingredients Strategy: FULL REPLACE
-    // It is cleaner to delete all old ingredients for this recipe and insert new ones
-    // rather than complex diffing logic.
-    if err := tx.Where("recipe_id = ?", id).Delete(&Ingredient{}).Error; err != nil {
-        tx.Rollback()
-        return
-    }
-    
-    // 4. Bulk Insert New Ingredients
-    for _, ing := range payload.Ingredients {
-        ing.RecipeID = id
-        if err := tx.Create(&ing).Error; err != nil {
-             tx.Rollback()
-             return
-        }
-    }
-    
-    // 5. Commit
-    tx.Commit()
-}
+// Backend Logic...
 `;
-
   return (
     <div className="p-4 space-y-6">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -486,7 +483,6 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
   );
 };
 
-// 2. Recipe Form (Add/Edit)
 const RecipeForm = ({ 
   initialData, 
   onSave, 
@@ -499,8 +495,6 @@ const RecipeForm = ({
   lang: 'en' | 'zh'
 }) => {
   const t = TRANSLATIONS[lang];
-  
-  // Form State
   const [formData, setFormData] = useState<Recipe>(initialData || {
     id: Math.random().toString(),
     title: '',
@@ -514,7 +508,6 @@ const RecipeForm = ({
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  // Ingredient Helpers
   const addIngredientRow = () => {
     setFormData(prev => ({
       ...prev,
@@ -545,7 +538,6 @@ const RecipeForm = ({
     setPasteMode(false);
   };
 
-  // Steps Helpers
   const addStep = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && e.currentTarget.value.trim()) {
       setFormData(prev => ({
@@ -565,7 +557,6 @@ const RecipeForm = ({
 
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-      {/* Header */}
       <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
         <h2 className="font-bold text-lg flex items-center gap-2">
           {initialData ? <Edit2 className="w-5 h-5"/> : <Plus className="w-5 h-5"/>}
@@ -575,7 +566,6 @@ const RecipeForm = ({
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Basic Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">{t.labels.recipeTitle}</label>
@@ -597,7 +587,6 @@ const RecipeForm = ({
           </div>
         </div>
 
-        {/* Image Preview & URL */}
         <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
            <img src={formData.image} alt="Preview" className="w-16 h-16 rounded object-cover bg-gray-200" />
            <div className="flex-1 space-y-1">
@@ -610,7 +599,6 @@ const RecipeForm = ({
            </div>
         </div>
 
-        {/* Ingredients Section */}
         <div>
           <div className="flex justify-between items-center mb-3">
             <label className="font-bold text-gray-800">{t.labels.ingredients}</label>
@@ -624,7 +612,7 @@ const RecipeForm = ({
             </div>
           </div>
 
-          {pasteMode ? (
+          {pasteMode && (
             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-4 animate-in fade-in">
               <textarea 
                 className="w-full h-32 p-3 rounded-lg border border-indigo-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -641,32 +629,28 @@ const RecipeForm = ({
                 </button>
               </div>
             </div>
-          ) : null}
+          )}
 
           <div className="space-y-2">
             {formData.ingredients.map((ing, i) => (
               <div key={i} className="flex items-center gap-2 group">
-                {/* Name */}
                 <input 
                   className="flex-[2] border border-gray-200 bg-gray-50 rounded-lg p-2 text-sm focus:bg-white focus:border-indigo-500 outline-none transition-colors"
                   placeholder="Name"
                   value={ing.name}
                   onChange={e => updateIngredient(i, 'name', e.target.value)}
                 />
-                {/* Amount */}
                 <input 
                   type="number"
                   className="flex-[0.5] w-16 border border-gray-200 bg-gray-50 rounded-lg p-2 text-sm text-center focus:bg-white focus:border-indigo-500 outline-none transition-colors"
                   value={ing.amount}
                   onChange={e => updateIngredient(i, 'amount', parseFloat(e.target.value))}
                 />
-                {/* Unit */}
                 <input 
                    className="flex-[0.5] w-16 border border-gray-200 bg-gray-50 rounded-lg p-2 text-sm text-center focus:bg-white focus:border-indigo-500 outline-none transition-colors"
                    value={ing.unit}
                    onChange={e => updateIngredient(i, 'unit', e.target.value)}
                 />
-                {/* Seasoning Toggle */}
                 <button 
                   onClick={() => updateIngredient(i, 'isSeasoning', !ing.isSeasoning)}
                   className={`p-2 rounded-lg transition-colors ${ing.isSeasoning ? 'bg-green-100 text-green-700' : 'text-gray-300 hover:bg-gray-100'}`}
@@ -674,7 +658,6 @@ const RecipeForm = ({
                 >
                   <Leaf className="w-4 h-4" />
                 </button>
-                {/* Delete */}
                 <button 
                   onClick={() => removeIngredient(i)}
                   className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
@@ -692,7 +675,6 @@ const RecipeForm = ({
           </div>
         </div>
 
-        {/* Steps Section */}
         <div>
            <label className="font-bold text-gray-800 block mb-3">{t.labels.steps}</label>
            <div className="space-y-2">
@@ -722,7 +704,6 @@ const RecipeForm = ({
 
       </div>
 
-      {/* Footer Actions */}
       <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-3">
         <button 
           onClick={onCancel}
@@ -741,14 +722,15 @@ const RecipeForm = ({
   );
 };
 
-// 3. Recipe Management (Parent View)
 const RecipeView = ({ 
   recipes, 
+  inventory,
   onDelete,
   onSave,
   lang 
 }: { 
   recipes: Recipe[], 
+  inventory: InventoryItem[],
   onDelete: (id: string) => void,
   onSave: (r: Recipe) => void,
   lang: 'en' | 'zh' 
@@ -757,17 +739,38 @@ const RecipeView = ({
   const [isCreating, setIsCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter recipes based on title, tags, or ingredients
-  const filteredRecipes = recipes.filter(r => {
+  const aggregatedStock = useMemo(() => getAggregatedInventory(inventory), [inventory]);
+
+  const recipesWithStatus = useMemo(() => {
+    return recipes.map(recipe => {
+      let isCookable = true;
+      if (recipe.ingredients.length === 0) isCookable = false;
+
+      for (const ing of recipe.ingredients) {
+         if (ing.isSeasoning) continue;
+         const key = ing.name.trim().toLowerCase();
+         const stockAmount = aggregatedStock.get(key) || 0;
+         if (stockAmount < ing.amount) {
+           isCookable = false;
+           break;
+         }
+      }
+      return { ...recipe, isCookable };
+    });
+  }, [recipes, aggregatedStock]);
+
+  const filteredRecipes = recipesWithStatus.filter(r => {
     const q = searchQuery.toLowerCase();
     return (
       r.title.toLowerCase().includes(q) ||
       r.tags.some(tag => tag.toLowerCase().includes(q)) ||
       r.ingredients.some(ing => ing.name.toLowerCase().includes(q))
     );
+  }).sort((a, b) => {
+    if (a.isCookable === b.isCookable) return a.title.localeCompare(b.title);
+    return a.isCookable ? -1 : 1;
   });
 
-  // If adding or editing, show Form
   if (isCreating || editingId) {
     const initialData = editingId ? recipes.find(r => r.id === editingId) : undefined;
     return (
@@ -782,10 +785,8 @@ const RecipeView = ({
     );
   }
 
-  // Otherwise show List
   return (
     <div className="p-4">
-      {/* Search Bar */}
       <div className="mb-6 relative group">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <Search className="h-5 w-5 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -799,12 +800,18 @@ const RecipeView = ({
         />
       </div>
 
-      {/* Recipe Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredRecipes.map(recipe => (
           <div key={recipe.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col group hover:shadow-md transition-shadow">
             <div className="h-48 overflow-hidden relative">
                <img src={recipe.image} alt={recipe.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+               
+               {recipe.isCookable && (
+                 <div className="absolute top-2 left-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
+                   <CheckCircle2 className="w-3 h-3" /> {TRANSLATIONS[lang].labels.readyToCook}
+                 </div>
+               )}
+
                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 
                     onClick={() => setEditingId(recipe.id)}
@@ -853,12 +860,11 @@ const RecipeView = ({
   );
 };
 
-// 3. Meal Planner (V2: Multi-Recipe + Cook Workflow)
 const PlannerView = ({ 
   slots, 
   recipes, 
   onAddItem, 
-  onRemoveItem,
+  onRemoveItem, 
   onUpdateMultiplier,
   onCookSlot,
   lang 
@@ -877,12 +883,28 @@ const PlannerView = ({
   const [multiplier, setMultiplier] = useState(1);
   const t = TRANSLATIONS[lang];
 
-  // 5 Day View
-  const dates = Array.from({length: 5}, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return d.toISOString().split('T')[0];
+  const [planDates, setPlanDates] = useState<string[]>(() => {
+    return [new Date().toISOString().split('T')[0]];
   });
+
+  const addNextDay = () => {
+    const lastDateStr = planDates[planDates.length - 1];
+    const nextDate = new Date(lastDateStr);
+    nextDate.setDate(nextDate.getDate() + 1);
+    setPlanDates([...planDates, nextDate.toISOString().split('T')[0]].sort());
+  };
+
+  const handleDateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const date = e.target.value;
+    if (date) {
+        if (!planDates.includes(date)) {
+            setPlanDates(prev => [...prev, date].sort());
+        } else {
+             alert(lang === 'zh' ? '该日期已在计划中' : 'Date already in plan');
+        }
+        e.target.value = ''; 
+    }
+  };
 
   const openAddModal = (date: string, type: string) => {
     setModalData({ date, type });
@@ -898,15 +920,14 @@ const PlannerView = ({
 
   return (
     <div className="p-4 space-y-6">
-      {dates.map(date => (
-        <div key={date} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      {planDates.map(date => (
+        <div key={date} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 animate-in fade-in slide-in-from-bottom-2">
           <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-500" />
             {date}
           </h3>
           <div className="space-y-4">
             {['breakfast', 'lunch', 'dinner'].map(type => {
-              // V2: Find the slot container
               const slot = slots.find(s => s.date === date && s.type === type);
               const hasItems = slot && slot.items.length > 0;
 
@@ -934,7 +955,6 @@ const PlannerView = ({
                     </div>
                   </div>
 
-                  {/* List of Recipes in this Slot */}
                   {!hasItems ? (
                     <div className="text-xs text-gray-400 italic py-2 text-center">Empty</div>
                   ) : (
@@ -979,7 +999,27 @@ const PlannerView = ({
         </div>
       ))}
 
-      {/* Add Item Modal */}
+      <div className="flex gap-3 mt-4 h-14">
+        <button 
+          onClick={addNextDay}
+          className="flex-1 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-500 font-medium hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          {t.actions.addDay}
+        </button>
+        
+        {/* REWRITTEN: CSS Expanded Indicator Strategy - Uses relative container + absolute input with CSS hack */}
+        <div className="flex-1 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 relative">
+           <Calendar className="w-5 h-5 pointer-events-none" />
+           <span className="pointer-events-none">{t.actions.selectDate}</span>
+           <input 
+              type="date"
+              className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
+              onChange={handleDateSelect}
+           />
+        </div>
+      </div>
+
       {modalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-4">
@@ -1025,23 +1065,32 @@ const PlannerView = ({
   );
 };
 
-// 4. Inventory (Full CRUD)
 const InventoryView = ({ 
   inventory, 
   onAdd, 
   onEdit, 
-  onDelete, 
+  onDelete,
+  onMerge,
   lang 
 }: { 
   inventory: InventoryItem[], 
   onAdd: (item: InventoryItem) => void,
   onEdit: (id: string, item: Partial<InventoryItem>) => void,
   onDelete: (id: string) => void,
+  onMerge: () => void,
   lang: 'en' | 'zh'
 }) => {
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<InventoryItem>>({});
   const t = TRANSLATIONS[lang];
+
+  const sortedInventory = useMemo(() => {
+    return [...inventory].sort((a, b) => {
+      const nameComp = a.name.localeCompare(b.name, lang === 'zh' ? 'zh' : 'en');
+      if (nameComp !== 0) return nameComp;
+      return a.expirationDate.localeCompare(b.expirationDate);
+    });
+  }, [inventory, lang]);
 
   const handleSave = () => {
     if (isEditing === 'new') {
@@ -1051,7 +1100,7 @@ const InventoryView = ({
         amount: formData.amount || 1,
         unit: formData.unit || 'pcs',
         status: 'normal',
-        expirationDate: '2025-01-01'
+        expirationDate: formData.expirationDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
       });
     } else if (isEditing) {
       onEdit(isEditing, formData);
@@ -1060,8 +1109,25 @@ const InventoryView = ({
     setFormData({});
   };
 
+  const setDateOffset = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    setFormData(prev => ({ ...prev, expirationDate: d.toISOString().split('T')[0] }));
+  };
+
   return (
     <div className="p-4">
+      <div className="flex justify-end mb-3">
+        <button 
+          onClick={onMerge}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs rounded-lg shadow-sm hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+          title={t.labels.mergeHint}
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          {t.actions.merge}
+        </button>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-20">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 text-gray-600 border-b border-gray-200">
@@ -1072,38 +1138,47 @@ const InventoryView = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {inventory.map(item => (
-              <tr key={item.id} className="hover:bg-gray-50 group">
-                <td className="p-4 font-medium text-gray-800">
-                  {item.name}
-                  <div className={`mt-1 inline-flex text-[10px] px-1.5 rounded border ${getStatusColor(item.status)}`}>
-                    {t.labels[item.status]}
-                  </div>
-                </td>
-                <td className="p-4 text-gray-600 text-right">{item.amount} {item.unit}</td>
-                <td className="p-4 text-center">
-                  <div className="flex justify-center gap-2">
-                    <button 
-                      onClick={() => { setIsEditing(item.id); setFormData(item); }}
-                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => onDelete(item.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {sortedInventory.map(item => {
+              const freshness = getFreshness(item.expirationDate);
+              return (
+                <tr key={item.id} className="hover:bg-gray-50 group">
+                  <td className="p-4 font-medium text-gray-800">
+                    <div className="flex flex-col">
+                      <span>{item.name}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${freshness.color}`}>
+                          {t.labels[freshness.status]}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {freshness.days > 0 ? `${freshness.days} ${t.labels.daysLeft}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 text-gray-600 text-right align-top pt-5">{item.amount} {item.unit}</td>
+                  <td className="p-4 text-center align-top pt-4">
+                    <div className="flex justify-center gap-2">
+                      <button 
+                        onClick={() => { setIsEditing(item.id); setFormData(item); }}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => onDelete(item.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       
-      {/* Floating Action Button */}
       <div className="fixed bottom-20 right-4">
         <button 
           onClick={() => { setIsEditing('new'); setFormData({}); }}
@@ -1113,37 +1188,85 @@ const InventoryView = ({
         </button>
       </div>
 
-      {/* Edit/Add Modal */}
       {isEditing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
            <div className="bg-white rounded-xl w-full max-w-sm p-4 shadow-xl">
-             <h3 className="font-bold mb-4">{isEditing === 'new' ? 'Add Item' : 'Edit Item'}</h3>
-             <div className="space-y-3">
-               <input 
-                 className="w-full border border-gray-300 rounded p-2" 
-                 placeholder="Name" 
-                 value={formData.name || ''} 
-                 onChange={e => setFormData({...formData, name: e.target.value})}
-               />
-               <div className="flex gap-2">
+             <h3 className="font-bold mb-4 text-lg">{isEditing === 'new' ? 'Add Item' : 'Edit Item'}</h3>
+             
+             <div className="space-y-4">
+               <div>
+                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">{t.labels.ingredients}</label>
                  <input 
-                   type="number"
-                   className="flex-1 border border-gray-300 rounded p-2" 
-                   placeholder="Amount" 
-                   value={formData.amount || ''} 
-                   onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})}
-                 />
-                 <input 
-                   className="w-20 border border-gray-300 rounded p-2" 
-                   placeholder="Unit" 
-                   value={formData.unit || ''} 
-                   onChange={e => setFormData({...formData, unit: e.target.value})}
+                   className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                   placeholder="Name" 
+                   value={formData.name || ''} 
+                   onChange={e => setFormData({...formData, name: e.target.value})}
                  />
                </div>
+
+               <div className="grid grid-cols-2 gap-3">
+                 <div>
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">{t.labels.servings}</label>
+                   <input 
+                     type="number"
+                     className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                     placeholder="0" 
+                     value={formData.amount || ''} 
+                     onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})}
+                   />
+                 </div>
+                 <div>
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Unit</label>
+                   <input 
+                     className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                     placeholder="pcs/g/ml" 
+                     value={formData.unit || ''} 
+                     onChange={e => setFormData({...formData, unit: e.target.value})}
+                   />
+                 </div>
+               </div>
+
+               <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                 <label className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2 block flex items-center gap-1">
+                   <Clock className="w-3 h-3" /> {t.actions.setFreshness}
+                 </label>
+                 
+                 <input 
+                   type="date"
+                   className="w-full border border-blue-200 rounded-lg p-2 mb-3 text-sm focus:ring-2 focus:ring-blue-400 outline-none bg-white"
+                   value={formData.expirationDate || ''}
+                   onChange={e => setFormData({...formData, expirationDate: e.target.value})}
+                 />
+
+                 <div className="grid grid-cols-3 gap-2">
+                   <button 
+                    onClick={() => setDateOffset(3)}
+                    className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 text-xs text-blue-700 transition-colors"
+                   >
+                     <Sun className="w-4 h-4 mb-1 text-orange-400" />
+                     {t.freshness.fridge}
+                   </button>
+                   <button 
+                    onClick={() => setDateOffset(7)}
+                    className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 text-xs text-blue-700 transition-colors"
+                   >
+                     <Calendar className="w-4 h-4 mb-1 text-green-500" />
+                     {t.freshness.week}
+                   </button>
+                   <button 
+                    onClick={() => setDateOffset(30)}
+                    className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 text-xs text-blue-700 transition-colors"
+                   >
+                     <Snowflake className="w-4 h-4 mb-1 text-cyan-400" />
+                     {t.freshness.frozen}
+                   </button>
+                 </div>
+               </div>
              </div>
+
              <div className="flex gap-3 mt-6">
-                <button onClick={() => setIsEditing(null)} className="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded">{t.actions.cancel}</button>
-                <button onClick={handleSave} className="flex-1 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{t.actions.save}</button>
+                <button onClick={() => setIsEditing(null)} className="flex-1 py-2.5 text-gray-500 hover:bg-gray-100 rounded-lg font-medium">{t.actions.cancel}</button>
+                <button onClick={handleSave} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md shadow-indigo-200">{t.actions.save}</button>
              </div>
            </div>
         </div>
@@ -1152,7 +1275,6 @@ const InventoryView = ({
   );
 };
 
-// 5. Shopping List
 const ShoppingListView = ({ 
   plans, 
   recipes, 
@@ -1172,13 +1294,11 @@ const ShoppingListView = ({
   const generateList = () => {
     const needed = new Map<string, { amount: number, unit: string }>();
 
-    // V2 Logic: Iterate Slots -> Items -> Ingredients
     plans.forEach(slot => {
       slot.items.forEach(item => {
         const recipe = recipes.find(r => r.id === item.recipeId);
         if (!recipe) return;
         recipe.ingredients.forEach(ing => {
-          // Logic: Recipe Base * Item Multiplier
           const amountNeeded = ing.amount * item.multiplier;
           const existing = needed.get(ing.name);
           if (existing) {
@@ -1222,7 +1342,6 @@ const ShoppingListView = ({
     setList(list.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
   };
 
-  // Allow user to edit the amount they actually bought
   const updateAmount = (id: string, val: number) => {
     setList(list.map(item => item.id === id ? { ...item, needed: val } : item));
   };
@@ -1268,7 +1387,6 @@ const ShoppingListView = ({
             <div className="flex-1">
               <div className={`font-medium ${item.checked ? 'text-green-800 line-through' : 'text-gray-800'}`}>{item.name}</div>
               
-              {/* Editable Amount Input */}
               <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
                  <input 
                    type="number"
@@ -1297,14 +1415,11 @@ const ShoppingListView = ({
   );
 };
 
-// --- APP ---
-
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState<'plan' | 'recipes' | 'inventory' | 'shop' | 'specs' | 'profile'>('plan');
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   
-  // User State
   const [user, setUser] = useState<UserProfile>({
     username: 'root',
     name: 'Root User',
@@ -1312,11 +1427,9 @@ const App = () => {
     joinedDate: '2025-01-01'
   });
 
-  // V2 STATE
   const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
   const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
   
-  // V2: MealSlots (Flat list of slots that have items)
   const [slots, setSlots] = useState<MealSlot[]>([
     { 
       id: '101', 
@@ -1324,17 +1437,14 @@ const App = () => {
       type: 'dinner', 
       items: [
         { id: 'item1', recipeId: '1', multiplier: 2 },
-        { id: 'item2', recipeId: '3', multiplier: 2 } // Rice
+        { id: 'item2', recipeId: '3', multiplier: 2 }
       ] 
     }
   ]);
 
-  // Cook Modal State
   const [cookModal, setCookModal] = useState<{ isOpen: boolean, slot: MealSlot | null, consumption: Record<string, number> }>({
     isOpen: false, slot: null, consumption: {}
   });
-
-  // --- ACTIONS ---
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -1342,7 +1452,7 @@ const App = () => {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    setActiveTab('plan'); // Reset tab
+    setActiveTab('plan'); 
   };
 
   const handleSaveRecipe = (recipe: Recipe) => {
@@ -1376,7 +1486,7 @@ const App = () => {
     setSlots(prev => prev.map(s => {
       if (s.id !== slotId) return s;
       return { ...s, items: s.items.filter(i => i.id !== itemId) };
-    }).filter(s => s.items.length > 0)); // Remove empty slots
+    }).filter(s => s.items.length > 0)); 
   };
 
   const updateItemMultiplier = (slotId: string, itemId: string, m: number) => {
@@ -1386,41 +1496,42 @@ const App = () => {
     }));
   };
 
-  // NEW: Handle Shopping List -> Inventory
   const handlePurchase = (items: ShoppingListItem[]) => {
     setInventory(prev => {
-      const updated = [...prev];
-      items.forEach(shopItem => {
-         // Find existing item by name AND unit to update amount
-         const idx = updated.findIndex(i => i.name === shopItem.name && i.unit === shopItem.unit);
-         if (idx >= 0) {
-            // Update existing
-            updated[idx] = {
-              ...updated[idx],
-              amount: updated[idx].amount + shopItem.needed, // Add bought amount
-              status: 'normal', // Reset status
-              expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0] // +7 days default
-            };
-         } else {
-            // Create new
-            updated.push({
-               id: Math.random().toString(),
-               name: shopItem.name,
-               amount: shopItem.needed,
-               unit: shopItem.unit,
-               status: 'normal',
-               expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-            });
-         }
-      });
-      return updated;
+      const newItems = items.map(shopItem => ({
+        id: Math.random().toString(),
+        name: shopItem.name,
+        amount: shopItem.needed,
+        unit: shopItem.unit,
+        status: 'normal' as const,
+        expirationDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+      }));
+      return [...prev, ...newItems];
     });
     alert(lang === 'zh' ? `已将 ${items.length} 项物品加入库存！` : `Added ${items.length} items to inventory!`);
   };
+  
+  const handleMergeDuplicates = () => {
+    setInventory(prev => {
+      const map = new Map<string, InventoryItem>();
+      prev.forEach(item => {
+        const key = item.name.trim().toLowerCase() + '::' + item.unit.trim().toLowerCase();
+        if (map.has(key)) {
+          const existing = map.get(key)!;
+          const newAmount = existing.amount + item.amount;
+          const newExp = existing.expirationDate < item.expirationDate ? existing.expirationDate : item.expirationDate;
+          const newStatus = getFreshness(newExp).status;
+          map.set(key, { ...existing, amount: newAmount, expirationDate: newExp, status: newStatus as any });
+        } else {
+          map.set(key, item);
+        }
+      });
+      return Array.from(map.values());
+    });
+    alert(lang === 'zh' ? "合并完成！" : "Merged!");
+  };
 
-  // COOK LOGIC (Updated to remove 0 amount items)
   const openCookModal = (slot: MealSlot) => {
-    // 1. Calculate Consumption
     const totalNeeds: Record<string, number> = {};
     slot.items.forEach(item => {
       const r = recipes.find(rc => rc.id === item.recipeId);
@@ -1434,14 +1545,13 @@ const App = () => {
   };
 
   const confirmCook = () => {
-    // 2. Deduct Inventory
     setInventory(prev => prev.map(inv => {
       const consumedAmount = cookModal.consumption[inv.name];
       if (consumedAmount) {
         return { ...inv, amount: Math.max(0, inv.amount - consumedAmount) };
       }
       return inv;
-    }).filter(inv => inv.amount > 0)); // AUTOMATICALLY REMOVE ZERO AMOUNT ITEMS
+    }).filter(inv => inv.amount > 0)); 
     
     setCookModal({ isOpen: false, slot: null, consumption: {} });
     alert(lang === 'zh' ? "烹饪完成！库存已更新。" : "Cooked! Inventory updated.");
@@ -1449,14 +1559,12 @@ const App = () => {
 
   const t = TRANSLATIONS[lang];
 
-  // --- AUTH CHECK ---
   if (!isAuthenticated) {
     return <LoginView onLogin={handleLogin} lang={lang} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
           <div className="bg-orange-500 p-1.5 rounded-lg"><ChefHat className="w-5 h-5 text-white" /></div>
@@ -1475,10 +1583,10 @@ const App = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto">
         {activeTab === 'recipes' && <RecipeView 
             recipes={recipes} 
+            inventory={inventory}
             lang={lang} 
             onDelete={(id) => setRecipes(r => r.filter(x => x.id !== id))} 
             onSave={handleSaveRecipe}
@@ -1491,16 +1599,15 @@ const App = () => {
         {activeTab === 'inventory' && <InventoryView 
           inventory={inventory} lang={lang} 
           onAdd={(i) => setInventory([...inventory, i])}
-          // Updated: Filter 0 amount on manual edit
           onEdit={(id, data) => setInventory(inventory.map(i => i.id === id ? {...i, ...data} : i).filter(i => i.amount > 0))}
           onDelete={(id) => setInventory(inventory.filter(i => i.id !== id))}
+          onMerge={handleMergeDuplicates}
         />}
         {activeTab === 'shop' && <ShoppingListView plans={slots} recipes={recipes} inventory={inventory} onPurchase={handlePurchase} lang={lang} />}
         {activeTab === 'specs' && <ArchitectureView lang={lang} />}
         {activeTab === 'profile' && <ProfileView user={user} onLogout={handleLogout} lang={lang} />}
       </main>
 
-      {/* Cook Consumption Modal */}
       {cookModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
            <div className="bg-white rounded-xl w-full max-w-sm p-4 shadow-xl">
@@ -1540,7 +1647,6 @@ const App = () => {
         </div>
       )}
 
-      {/* Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe">
         <div className="max-w-3xl mx-auto flex justify-around">
           {[
@@ -1565,7 +1671,6 @@ const App = () => {
   );
 };
 
-// --- BOOTSTRAP ---
 const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
