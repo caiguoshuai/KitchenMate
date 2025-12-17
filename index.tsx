@@ -37,7 +37,9 @@ import {
   Snowflake,
   Sun,
   Layers,
-  CheckCircle2
+  CheckCircle2,
+  Smartphone,
+  ShieldCheck
 } from 'lucide-react';
 
 // Import Types
@@ -69,6 +71,7 @@ const TRANSLATIONS = {
       addRecipe: 'Add Recipe',
       editRecipe: 'Edit Recipe',
       login: 'Login',
+      register: 'Create Account',
       profile: 'My Profile'
     },
     actions: {
@@ -89,12 +92,17 @@ const TRANSLATIONS = {
       parse: 'Parse',
       addRow: 'Add Row',
       login: 'Sign In',
+      register: 'Sign Up',
       logout: 'Sign Out',
       changePassword: 'Change Password',
       setFreshness: 'Set Freshness',
       merge: 'Merge Duplicates',
       removeDay: 'Remove Day',
-      clearSlot: 'Clear All'
+      clearSlot: 'Clear All',
+      haveAccount: 'Already have an account? Sign In',
+      noAccount: "Don't have an account? Sign Up",
+      getCode: 'Get Code',
+      resend: 'Resend'
     },
     labels: {
       servings: 'Servings',
@@ -113,12 +121,17 @@ const TRANSLATIONS = {
       stepHint: 'Enter step instruction...',
       username: 'Username',
       password: 'Password',
+      name: 'Display Name',
+      confirmPassword: 'Confirm Password',
       welcome: 'Welcome back',
       memberSince: 'Member since',
       expirationDate: 'Expiration Date',
       daysLeft: 'days left',
       mergeHint: 'Combines items with same name & unit. Keeps earliest date.',
-      readyToCook: 'Ready to Cook'
+      readyToCook: 'Ready to Cook',
+      phone: 'Phone Number',
+      verifyCode: 'Verification Code',
+      codeSent: 'Code sent to'
     },
     freshness: {
       quick: 'Quick Set',
@@ -143,6 +156,7 @@ const TRANSLATIONS = {
       addRecipe: '添加食谱',
       editRecipe: '编辑食谱',
       login: '用户登录',
+      register: '注册账户',
       profile: '个人中心'
     },
     actions: {
@@ -163,12 +177,17 @@ const TRANSLATIONS = {
       parse: '解析',
       addRow: '添加一行',
       login: '登录',
+      register: '注册',
       logout: '退出登录',
       changePassword: '修改密码',
       setFreshness: '保质期设置',
       merge: '合并重复项',
       removeDay: '移除此日',
-      clearSlot: '清空'
+      clearSlot: '清空',
+      haveAccount: '已有账号？去登录',
+      noAccount: '还没有账号？去注册',
+      getCode: '获取验证码',
+      resend: '重新发送'
     },
     labels: {
       servings: '份量',
@@ -187,12 +206,17 @@ const TRANSLATIONS = {
       stepHint: '输入步骤说明...',
       username: '用户名',
       password: '密码',
+      name: '昵称',
+      confirmPassword: '确认密码',
       welcome: '欢迎回来',
       memberSince: '注册时间',
       expirationDate: '保质期至',
       daysLeft: '天剩余',
       mergeHint: '合并同名同单位的食材，保留最早过期时间。',
-      readyToCook: '食材齐备'
+      readyToCook: '食材齐备',
+      phone: '手机号码',
+      verifyCode: '验证码',
+      codeSent: '验证码已发送至'
     },
     freshness: {
       quick: '快速设置',
@@ -253,33 +277,109 @@ const getAggregatedInventory = (inventory: InventoryItem[]) => {
 
 // --- COMPONENTS ---
 
-const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }) => {
+const LoginView = ({ onLogin, lang }: { onLogin: (user?: UserProfile) => void, lang: 'en' | 'zh' }) => {
+  const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
   const t = TRANSLATIONS[lang];
 
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const handleSendCode = () => {
+    if (!phone) {
+      setError(lang === 'zh' ? '请输入手机号' : 'Please enter phone number');
+      return;
+    }
+    setError('');
+    setCountdown(60);
+    alert(lang === 'zh' ? `验证码已发送至 ${phone}: 1234` : `Verification code sent to ${phone}: 1234`);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'root' && password === 'root') {
-      onLogin();
+    setError('');
+
+    if (isRegister) {
+      if (!username || !password || !name || !confirmPassword || !phone || !verifyCode) {
+         setError(lang === 'zh' ? '请填写所有字段' : 'Please fill in all fields');
+         return;
+      }
+      if (password !== confirmPassword) {
+         setError(lang === 'zh' ? '密码不一致' : 'Passwords do not match');
+         return;
+      }
+      if (verifyCode !== '1234') {
+         setError(lang === 'zh' ? '验证码错误 (Try 1234)' : 'Invalid verification code (Try 1234)');
+         return;
+      }
+
+      // Success Register
+      onLogin({
+        username,
+        name,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+        joinedDate: new Date().toISOString().split('T')[0]
+      });
     } else {
-      setError(lang === 'zh' ? '用户名或密码错误' : 'Invalid username or password');
+      if (username === 'root' && password === 'root') {
+        onLogin();
+      } else {
+        setError(lang === 'zh' ? '用户名或密码错误' : 'Invalid username or password');
+      }
     }
+  };
+
+  const toggleMode = () => {
+    setIsRegister(!isRegister);
+    setError('');
+    setPassword('');
+    setConfirmPassword('');
+    setVerifyCode('');
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-8 border border-gray-100">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-8 border border-gray-100 animate-in fade-in zoom-in-95 duration-300">
         <div className="flex justify-center mb-6">
           <div className="bg-orange-100 p-4 rounded-full">
             <ChefHat className="w-10 h-10 text-orange-600" />
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">KitchenMate</h2>
-        <p className="text-center text-gray-500 mb-8">{t.labels.welcome}</p>
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+          {isRegister ? t.titles.register : 'KitchenMate'}
+        </h2>
+        <p className="text-center text-gray-500 mb-8">
+          {isRegister ? (lang === 'zh' ? '创建您的专属厨房空间' : 'Create your personal kitchen space') : t.labels.welcome}
+        </p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isRegister && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.name}</label>
+              <div className="relative">
+                <UserCircle className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input 
+                  type="text"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="Chef John"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.username}</label>
             <div className="relative">
@@ -287,12 +387,13 @@ const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }
               <input 
                 type="text"
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="root"
+                placeholder={isRegister ? "john_doe" : "root"}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
             </div>
           </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.password}</label>
             <div className="relative">
@@ -300,15 +401,75 @@ const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }
               <input 
                 type="password"
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="root"
+                placeholder="••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
           </div>
+
+          {isRegister && (
+            <>
+             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.confirmPassword}</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input 
+                  type="password"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.phone}</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Smartphone className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <input 
+                    type="tel"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    placeholder="13800000000"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSendCode}
+                  disabled={countdown > 0}
+                  className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                    countdown > 0 
+                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                      : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+                  }`}
+                >
+                  {countdown > 0 ? `${countdown}s` : t.actions.getCode}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.labels.verifyCode}</label>
+              <div className="relative">
+                <ShieldCheck className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input 
+                  type="text"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="1234"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value)}
+                />
+              </div>
+            </div>
+            </>
+          )}
           
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2">
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
               <AlertTriangle className="w-4 h-4" />
               {error}
             </div>
@@ -316,11 +477,21 @@ const LoginView = ({ onLogin, lang }: { onLogin: () => void, lang: 'en' | 'zh' }
 
           <button 
             type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition-transform active:scale-95"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition-transform active:scale-95 flex justify-center items-center gap-2"
           >
-            {t.actions.login}
+            {isRegister ? t.actions.register : t.actions.login}
+            {!isRegister && <ArrowRight className="w-4 h-4" />}
           </button>
         </form>
+
+        <div className="mt-6 text-center">
+            <button 
+                onClick={toggleMode}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium hover:underline transition-all"
+            >
+                {isRegister ? t.actions.haveAccount : t.actions.noAccount}
+            </button>
+        </div>
       </div>
     </div>
   );
@@ -332,8 +503,8 @@ const ProfileView = ({ user, onLogout, lang }: { user: UserProfile, onLogout: ()
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center">
-        <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center mb-4 border-4 border-white shadow-lg">
-          <UserCircle className="w-16 h-16 text-indigo-500" />
+        <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center mb-4 border-4 border-white shadow-lg overflow-hidden">
+          {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : <UserCircle className="w-16 h-16 text-indigo-500" />}
         </div>
         <h2 className="text-xl font-bold text-gray-800">{user.name}</h2>
         <p className="text-gray-500 text-sm font-mono">@{user.username}</p>
@@ -1390,7 +1561,10 @@ const App = () => {
     isOpen: false, slot: null, consumption: {}
   });
 
-  const handleLogin = () => {
+  const handleLogin = (loggedInUser?: UserProfile) => {
+    if (loggedInUser) {
+        setUser(loggedInUser);
+    }
     setIsAuthenticated(true);
   };
 
